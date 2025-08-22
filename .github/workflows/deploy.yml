@@ -24,6 +24,18 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Verify .env file exists
+        run: |
+          if [ -f ".env" ]; then
+            echo "✅ .env file found"
+            ls -la .env
+          else
+            echo "❌ ERROR: .env file not found!"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -31,7 +43,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
-            mkdir -p /home/administrator/PROJECTS/pwa-installation-api
+            mkdir -p /home/administrator/PROJECTS/pwa-installation-api/dist
 
       - name: Upload dist files
         uses: appleboy/scp-action@v0.1.7
@@ -41,15 +53,31 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           source: "dist/*"
           target: "/home/administrator/PROJECTS/pwa-installation-api/dist"
+          overwrite: true
 
-      - name: Upload .env file
+      - name: Upload .env file using absolute path
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
-          source: ".env"
+          source: "${{ github.workspace }}/.env"
           target: "/home/administrator/PROJECTS/pwa-installation-api/"
+          overwrite: true
+          debug: true
+
+      # Alternative approach if SCP still fails
+      - name: Upload .env file via SSH (fallback)
+        if: failure() && steps.upload-env.outcome == 'failure'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
+          script: |
+            cat > /home/administrator/PROJECTS/pwa-installation-api/.env << 'EOF'
+            ${{ secrets.ENV_FILE_CONTENTS }}
+            EOF
 
       - name: Restart application with PM2
         uses: appleboy/ssh-action@v1.0.0
