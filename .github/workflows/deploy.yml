@@ -24,6 +24,26 @@ jobs:
       - name: Build project
         run: npm run build
 
+      - name: Verify dist files were built
+        run: |
+          echo "Checking if dist directory exists..."
+          if [ -d "dist" ]; then
+            echo "✅ dist directory found"
+            echo "Contents of dist directory:"
+            ls -la dist/
+            if [ -f "dist/server.js" ]; then
+              echo "✅ dist/server.js found"
+            else
+              echo "❌ dist/server.js not found!"
+              echo "Looking for other .js files:"
+              find dist/ -name "*.js" || true
+              exit 1
+            fi
+          else
+            echo "❌ dist directory not found!"
+            exit 1
+          fi
+
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -32,6 +52,7 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
             mkdir -p /home/administrator/PROJECTS/pwa-installation-api/dist
+            echo "Deployment directory prepared"
 
       - name: Upload dist files
         uses: appleboy/scp-action@v0.1.7
@@ -39,9 +60,27 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
-          source: "dist/*"
-          target: "/home/administrator/PROJECTS/pwa-installation-api/dist"
+          source: "dist/"
+          target: "/home/administrator/PROJECTS/pwa-installation-api/"
           overwrite: true
+
+      - name: Verify files on server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
+          script: |
+            echo "Checking uploaded files on server..."
+            ls -la /home/administrator/PROJECTS/pwa-installation-api/dist/
+            if [ -f "/home/administrator/PROJECTS/pwa-installation-api/dist/server.js" ]; then
+              echo "✅ server.js found on server"
+            else
+              echo "❌ server.js not found on server!"
+              echo "Available files:"
+              find /home/administrator/PROJECTS/pwa-installation-api/dist/ -name "*.js" || true
+              exit 1
+            fi
 
       - name: Verify .env file exists on server
         uses: appleboy/ssh-action@v1.0.0
@@ -50,11 +89,8 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
-            echo "Checking if .env file exists on server..."
             if [ -f "/home/administrator/PROJECTS/pwa-installation-api/.env" ]; then
               echo "✅ .env file found on server"
-              echo "File permissions:"
-              ls -la /home/administrator/PROJECTS/pwa-installation-api/.env
             else
               echo "❌ .env file not found on server!"
               exit 1
@@ -68,7 +104,25 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
             cd /home/administrator/PROJECTS/pwa-installation-api
+            
+            # Check what's the main server file
+            if [ -f "dist/server.js" ]; then
+              SERVER_FILE="dist/server.js"
+            elif [ -f "dist/index.js" ]; then
+              SERVER_FILE="dist/index.js"
+            elif [ -f "dist/main.js" ]; then
+              SERVER_FILE="dist/main.js"
+            else
+              echo "❌ No server file found in dist directory!"
+              echo "Available files:"
+              find dist/ -name "*.js"
+              exit 1
+            fi
+            
+            echo "Using server file: $SERVER_FILE"
+            
+            # Stop if exists, then start
             pm2 stop pwa-installation-api || true
-            pm2 start dist/server.js --name pwa-installation-api
+            pm2 start $SERVER_FILE --name pwa-installation-api
             pm2 save
             pm2 status
