@@ -7,7 +7,7 @@ export class PwaInstallationDto {
   msisdn!: string;
 
   @IsBoolean()
-  status!: boolean;
+  consented_to_install!: boolean;
 
 }
 

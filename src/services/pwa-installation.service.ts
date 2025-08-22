@@ -16,7 +16,7 @@ export const upsertPwaInstallation = async (data: PwaInstallationDto) => {
       let noCount = existing.no_count ?? 0;
       let nextPrompt = existing.next_prompt;
 
-      if (data.status === false) {
+      if (data.consented_to_install === false) {
         noCount += 1;
         // Accumulate +30 days from current next_prompt or now if missing
         const baseDate = existing.next_prompt ? new Date(existing.next_prompt) : now;
@@ -42,15 +42,15 @@ export const upsertPwaInstallation = async (data: PwaInstallationDto) => {
 
     // --- Create new record ---
     const nextPrompt =
-      data.status === false
+      data.consented_to_install === false
         ? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) // +7 days for new false status
         : null;
 
     const entity = repo.create({
       ...data,
-      status: data.status ?? false,
+      consented_to_install: data.consented_to_install ?? false,
       next_prompt: nextPrompt,
-      no_count: data.status === false ? 1 : 0,
+      no_count: data.consented_to_install === false ? 1 : 0,
       created_at: now,
       updated_at: now,
     });

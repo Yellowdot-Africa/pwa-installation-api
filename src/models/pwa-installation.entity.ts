@@ -9,7 +9,7 @@ export class PwaInstallationTrack {
   msisdn!: string;
 
   @Column()
-  status!: boolean;
+  consented_to_install!: boolean;
 
   @Column({ type: "int" })
   no_count!: number;

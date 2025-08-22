@@ -24,7 +24,7 @@ export const openapiSpec = {
           content: {
             "application/json": {
               schema: {
-                $ref: "#/components/schemas/CreatePwaInstallationDto", // ✅ use only msisdn + status
+                $ref: "#/components/schemas/CreatePwaInstallationDto", // ✅ use only msisdn + consented_to_install
               },
             },
           },
@@ -58,9 +58,9 @@ export const openapiSpec = {
         type: "object",
         properties: {
           msisdn: { type: "string" },
-          status: { type: "boolean" },
+          consented_to_install: { type: "boolean" },
         },
-        required: ["msisdn", "status"],
+        required: ["msisdn", "consented_to_install"],
       },
     },
   },
