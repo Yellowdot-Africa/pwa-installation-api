@@ -24,15 +24,6 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Verify .env file exists
-        run: |
-          if [ -f ".env" ]; then
-            echo "✅ .env file found"
-            ls -la .env
-          else
-            echo "⚠️  .env file not found in repo, will use secret instead"
-          fi
-
       - name: Prepare deployment directory
         uses: appleboy/ssh-action@v1.0.0
         with:
@@ -52,35 +43,22 @@ jobs:
           target: "/home/administrator/PROJECTS/pwa-installation-api/dist"
           overwrite: true
 
-      - name: Upload .env file (primary method)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
-          source: ".env"
-          target: "/home/administrator/PROJECTS/pwa-installation-api/"
-          overwrite: true
-          debug: true
-
-      - name: Upload .env file from secret (fallback)
-        if: failure() && steps.upload-env.outcome == 'failure'
+      - name: Verify .env file exists on server
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
-            # Create .env file from secret content
-            cat > /home/administrator/PROJECTS/pwa-installation-api/.env << 'EOF'
-            ${{ secrets.ENV_FILE_CONTENTS }}
-            EOF
-            
-            # Verify the file was created
-            echo "✅ .env file created successfully"
-            ls -la /home/administrator/PROJECTS/pwa-installation-api/.env
-            echo "First few lines of .env:"
-            head -5 /home/administrator/PROJECTS/pwa-installation-api/.env
+            echo "Checking if .env file exists on server..."
+            if [ -f "/home/administrator/PROJECTS/pwa-installation-api/.env" ]; then
+              echo "✅ .env file found on server"
+              echo "File permissions:"
+              ls -la /home/administrator/PROJECTS/pwa-installation-api/.env
+            else
+              echo "❌ .env file not found on server!"
+              exit 1
+            fi
 
       - name: Restart application with PM2
         uses: appleboy/ssh-action@v1.0.0
