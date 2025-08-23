@@ -6,48 +6,14 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # 2. Setup Node
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
-
-      # 3. Install dependencies & build
-      - name: Install dependencies and build
-        run: |
-          npm ci
-          npm run build
-
-      # 4. Verify build output
-      - name: Verify dist folder
-        run: |
-          echo "Build completed. dist/ contents:"
-          ls -la dist || echo "⚠️ dist not found!"
-
-      # 5. Upload files to server
-      - name: Upload build to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
-          port: 22
-          source: |
-            dist/**/*
-            package.json
-            package-lock.json
-          target: /home/administrator/PROJECTS/pwa-installation-api/
-
-      # 6. Restart app via PM2
-      - name: Restart app with PM2
+      - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -55,8 +21,22 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           port: 22
           script: |
-            cd /home/administrator/PROJECTS/pwa-installation-api
+            echo "📦 Starting deployment..."
+            cd /home/administrator/PROJECTS/pwa-installation-api || exit 1
+
+            echo "🔄 Pulling latest changes..."
+            git fetch --all
+            git reset --hard origin/main
+
+            echo "📦 Installing dependencies..."
+            npm ci
+
+            echo "⚙️ Building project..."
+            npm run build
+
+            echo "🚀 Restarting PM2..."
             pm2 stop pwa-installation-api || true
             pm2 start dist/server.js --name pwa-installation-api
             pm2 save
-            echo "✅ Application restarted successfully!"
+
+            echo "✅ Deployment successful!"
