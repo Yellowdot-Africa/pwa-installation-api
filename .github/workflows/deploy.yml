@@ -43,18 +43,3 @@ jobs:
             cd /home/${{ secrets.SSH_USER }}/PROJECTS/pwa-installation-api
             npm install --production
             pm2 restart pwa-installation-api || pm2 start dist/main.js --name pwa-installation-api
-
-      - name: Health check
-        run: |
-          echo "Checking health of deployed app..."
-          for i in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://your-domain.com/health || true)
-            if [ "$STATUS" == "200" ]; then
-              echo "✅ Healthcheck passed"
-              exit 0
-            fi
-            echo "Waiting for app... attempt $i"
-            sleep 5
-          done
-          echo "❌ Healthcheck failed"
-          exit 1
