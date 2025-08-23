@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,7 +16,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18"
+          node-version: 18
 
       - name: Install dependencies
         run: npm ci
@@ -24,43 +24,37 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Copy files to server
+      - name: Copy build to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "dist/* package.json package-lock.json"
-          target: "/home/${{ secrets.SERVER_USER }}/PROJECTS/pwa-installation-api/"
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
+          source: "."
+          target: "/home/${{ secrets.SSH_USER }}/PROJECTS/pwa-installation-api"
 
-      - name: Deploy with PM2 (zero downtime + env vars)
-        uses: appleboy/ssh-action@v0.1.7
+      - name: Run remote commands on server
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
           script: |
-            cd /home/${{ secrets.SERVER_USER }}/PROJECTS/pwa-installation-api
-            echo "${{ secrets.ENV_FILE }}" > .env
+            cd /home/${{ secrets.SSH_USER }}/PROJECTS/pwa-installation-api
+            npm install --production
+            pm2 restart pwa-installation-api || pm2 start dist/main.js --name pwa-installation-api
 
-            # Install deps if package changed
-            npm ci --omit=dev
-
-            # Start or reload with zero-downtime
-            pm2 startOrReload ecosystem.config.js --env production || pm2 reload all
-
-            # Persist pm2 processes
-            pm2 save
-
-      - name: Health Check API
+      - name: Health check
         run: |
+          echo "Checking health of deployed app..."
           for i in {1..10}; do
-            if curl -sSf https://${{ secrets.APP_DOMAIN }}/health; then
-              echo "✅ App is healthy!"
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://your-domain.com/health || true)
+            if [ "$STATUS" == "200" ]; then
+              echo "✅ Healthcheck passed"
               exit 0
             fi
-            echo "⏳ Waiting for app..."
+            echo "Waiting for app... attempt $i"
             sleep 5
           done
-          echo "❌ App failed health check"
+          echo "❌ Healthcheck failed"
           exit 1
