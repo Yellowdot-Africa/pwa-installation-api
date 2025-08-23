@@ -6,37 +6,61 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Deploy to Server via SSH
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.DEPLOY_KEY_YD_TELECEL }}
-          port: 22
+          node-version: "18"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Copy files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "dist/* package.json package-lock.json"
+          target: "/home/${{ secrets.SERVER_USER }}/PROJECTS/pwa-installation-api/"
+
+      - name: Deploy with PM2 (zero downtime + env vars)
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            echo "📦 Starting deployment..."
-            cd /home/administrator/PROJECTS/pwa-installation-api || exit 1
+            cd /home/${{ secrets.SERVER_USER }}/PROJECTS/pwa-installation-api
+            echo "${{ secrets.ENV_FILE }}" > .env
 
-            echo "🔄 Pulling latest changes..."
-            git fetch --all
-            git reset --hard origin/main
+            # Install deps if package changed
+            npm ci --omit=dev
 
-            echo "📦 Installing dependencies..."
-            npm ci
+            # Start or reload with zero-downtime
+            pm2 startOrReload ecosystem.config.js --env production || pm2 reload all
 
-            echo "⚙️ Building project..."
-            npm run build
-
-            echo "🚀 Restarting PM2..."
-            pm2 stop pwa-installation-api || true
-            pm2 start dist/server.js --name pwa-installation-api
+            # Persist pm2 processes
             pm2 save
 
-            echo "✅ Deployment successful!"
+      - name: Health Check API
+        run: |
+          for i in {1..10}; do
+            if curl -sSf https://${{ secrets.APP_DOMAIN }}/health; then
+              echo "✅ App is healthy!"
+              exit 0
+            fi
+            echo "⏳ Waiting for app..."
+            sleep 5
+          done
+          echo "❌ App failed health check"
+          exit 1
